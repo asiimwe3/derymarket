@@ -54,7 +54,7 @@ Exit: first consolidated shipment cleared and delivered.
 Exit: partner APIs in external use.
 
 ## Open decisions
-- Final product name (SokoFlow rejected — brand conflict)
+- ~~Final product name~~ DECIDED: DeryMarket (domains .com/.ug/.africa/.io available — register now)
 - Commission percentages per mode
 - Hub cities for Ship From Abroad
 - Staging vs production Supabase project separation

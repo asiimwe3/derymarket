@@ -1,8 +1,8 @@
-# Trade Platform (working name TBD)
+# DeryMarket
 
 All-in-one trade ecosystem for Uganda and Africa: B2C marketplace, C2C classifieds, B2B wholesale/RFQ, services & bookings, auctions, rentals, barter, dropshipping, agricultural trade, Ship-From-Abroad imports, B2G procurement and multi-currency support — built on one shared Trade Engine, one account model and one financial ledger.
 
-> Working name note: "SokoFlow" was rejected — an active Kenyan FMCG company holds the brand. Decide the final product name before Phase 2 public launch.
+> Product name: DeryMarket (checked 2026-10-02: no brand conflicts; derymarket.com/.ug/.africa/.io all unregistered — register domains before public launch).
 
 ## Architecture
 
@@ -36,3 +36,5 @@ docs/         SRS, wireframe spec, wireframes
 6. Advanced Trade Ecosystem (trade intelligence, reporting, loyalty, partner APIs)
 
 Full specifications: `docs/specs/` (SRS & Technical Blueprint v1.0, Wireframe Specification v1.0).
+
+© 2026 DeryCode Technologies.
