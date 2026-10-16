@@ -2,7 +2,7 @@
 // S3 — Browse / search results: mode toggle + filter chips + result cards.
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
-import { apiFetch, type Listing } from '@/lib/api';
+import { browseListings, type Listing } from '@/lib/api';
 import { ListingCard, StateScreen } from '@/components/ui';
 
 const KINDS = [{ k: 'product', label: 'Market' }, { k: 'used_good', label: 'Deals' }, { k: 'produce', label: 'Agriculture' }];
@@ -16,8 +16,8 @@ function Browse() {
 
   useEffect(() => {
     setState('loading');
-    apiFetch(null, `/listings?kind=${kind}&size=24&q=${encodeURIComponent(q)}`)
-      .then((r) => { setItems((r as { items: Listing[] }).items); setState('ready'); })
+    browseListings(kind, q, 24)
+      .then((items) => { setItems(items); setState('ready'); })
       .catch(() => setState('error'));
   }, [kind, q]);
 

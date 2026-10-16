@@ -2,7 +2,7 @@
 // S2 — Home / Discover: mode chips, category strip, featured grid.
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { apiFetch, type Listing } from '@/lib/api';
+import { browseListings, type Listing } from '@/lib/api';
 import { ListingCard, EscrowBanner, StateScreen } from '@/components/ui';
 
 const MODES = [
@@ -18,8 +18,8 @@ export default function Home() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    apiFetch(null, '/listings?kind=product&size=8')
-      .then((r) => setFeatured((r as { items: Listing[] }).items))
+    browseListings('product', '', 8)
+      .then((items) => setFeatured(items))
       .catch((e) => setError(e.message));
   }, []);
 

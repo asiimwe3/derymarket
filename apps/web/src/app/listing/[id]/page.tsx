@@ -2,7 +2,7 @@
 // S4 — Listing details. GET /listings/:id is the Lesson 1 backend assignment,
 // so we try the API first and fall back to the browse-cached item.
 import { use, useEffect, useState } from 'react';
-import { apiFetch, type Listing } from '@/lib/api';
+import { getListing, type Listing } from '@/lib/api';
 import { EscrowBanner, StateScreen } from '@/components/ui';
 import { getCart, saveCart, type CartItem } from '@/lib/cart';
 
@@ -13,12 +13,9 @@ export default function ListingPage({ params }: { params: Promise<{ id: string }
 
   useEffect(() => {
     const cached = typeof window !== 'undefined' ? JSON.parse(sessionStorage.getItem(`dm.listing.${id}`) ?? 'null') : null;
-    apiFetch(null, `/listings/${id}`)
-      .then((r) => setListing(r as Listing))
-      .catch(() => {
-        if (cached) setListing(cached);
-        else setNote('GET /api/v1/listings/:id is your Lesson 1 assignment — build it and this page comes alive.');
-      });
+    getListing(id)
+      .then((l) => { if (l) setListing(l); else if (cached) setListing(cached); else setNote('This listing is not available.'); })
+      .catch(() => { if (cached) setListing(cached); });
   }, [id]);
 
   const addToCart = () => {
