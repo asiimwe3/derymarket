@@ -8,6 +8,7 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'derymarket-api', ts: Date.now() }));
+app.get(`${config.apiPrefix}/health`, (_req, res) => res.json({ ok: true, service: 'derymarket-api', ts: Date.now() }));
 
 app.use(`${config.apiPrefix}/accounts`, accountsRouter);
 app.use(`${config.apiPrefix}/listings`, listingsRouter);

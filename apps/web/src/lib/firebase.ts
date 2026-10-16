@@ -1,15 +1,17 @@
-// DeryMarket web app — Firebase client init.
-// Values come from .env (copy from .env.example). NEVER hardcode the API key.
-import { initializeApp, getApps, getApp } from "firebase/app";
+// DeryMarket web app - Firebase client init.
+import { initializeApp, getApps, getApp } from 'firebase/app';
 
+// Client config is public by design (Firebase web API keys are identifiers,
+// not secrets). Reads from .env.local so one repo serves any project.
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID!,
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? '',
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? '',
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? '',
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? '',
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? '',
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? ''
 };
 
-export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+export function fbApp() {
+  return getApps().length ? getApp() : initializeApp(firebaseConfig);
+}

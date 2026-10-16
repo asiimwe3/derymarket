@@ -20,15 +20,21 @@ export const listingsRouter = Router();
 listingsRouter.get('/', asyncHandler(async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const size = Math.min(config.pageSizeMax, Math.max(1, Number(req.query.size) || config.pageSizeDefault));
+  const kind = typeof req.query.kind === 'string' ? req.query.kind : 'product';
+  const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
 
+  // NOTE: offset pagination + in-memory text filtering are fine at course scale;
+  // real scale wants cursor pagination + a dedicated search index.
   const snap = await db.collection('listings')
     .where('status', '==', 'active')
+    .where('kind', '==', kind)
     .orderBy('createdAt', 'desc')
     .offset((page - 1) * size)
-    .limit(size)
+    .limit(q ? size * 3 : size)
     .get();
 
-  const items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const docs = q ? snap.docs.filter(doc => String(doc.data().title ?? '').toLowerCase().includes(q)) : snap.docs;
+  const items = docs.map(doc => ({ id: doc.id, ...doc.data() }));
   res.json({ page, size, items });
 }));
 

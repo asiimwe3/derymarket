@@ -8,3 +8,4 @@ dist/
 .expo/
 coverage/
 .DS_Store
+firestore-debug.log
