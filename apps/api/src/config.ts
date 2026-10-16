@@ -1,14 +1,7 @@
-import 'dotenv/config';
-
-function required(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing env ${name} — copy .env.example to .env and fill it in`);
-  return v;
-}
-
+/** Central config. Cloud Functions injects most of this automatically. */
 export const config = {
-  port: Number(process.env.PORT ?? 4000),
-  supabaseUrl: required('SUPABASE_URL'),
-  supabaseAnonKey: required('SUPABASE_ANON_KEY'),
-  supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
+  region: 'europe-west1',          // close to Uganda, cheaper than us-central
+  apiPrefix: '/api/v1',
+  pageSizeDefault: 20,
+  pageSizeMax: 50,
 };

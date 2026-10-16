@@ -13,7 +13,7 @@ Modular monolith with a Unified Trade API and 13 engines: Market, Bulk & Procure
 - Web: Next.js (TypeScript)
 - Mobile: React Native / Expo
 - Backend: Node/TypeScript modular monolith
-- Data: Supabase (PostgreSQL, Auth, Storage, Realtime), pg-boss jobs, transactional outbox event log
+- Data: Firebase (Auth, Firestore, Storage, Cloud Functions), transactional outbox event log
 - Payments: PesaPal (MTN MoMo, Airtel Money, cards, COD) with escrow + double-entry ledger
 
 ## Repository layout
@@ -22,7 +22,7 @@ Modular monolith with a Unified Trade API and 13 engines: Market, Bulk & Procure
 apps/web      Next.js web app (buyer, seller, business, admin portals)
 apps/mobile   Expo mobile app
 apps/api      Unified Trade API (modular monolith)
-supabase/     Migrations, RLS policies, seed data
+firestore/    Security rules, indexes (Firebase)
 docs/         SRS, wireframe spec, wireframes
 ```
 

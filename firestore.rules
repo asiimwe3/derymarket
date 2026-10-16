@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Teaching point: with Firebase, the server (Cloud Functions) uses the
+    // Admin SDK and BYPASSES these rules entirely. Rules only guard direct
+    // client access. Backend course policy: clients read public data only;
+    // ALL writes go through the API so validation/idempotency always applies.
+
+    match /profiles/{uid} {
+      allow read: if request.auth.uid == uid;
+      allow write: if false; // writes only via API
+    }
+
+    match /listings/{id} {
+      allow read: if resource.data.status == 'active' || request.auth != null;
+      allow write: if false; // API only
+    }
+
+    match /workspaces/{id} {
+      allow read: if request.auth != null;
+      allow write: if false; // API only
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

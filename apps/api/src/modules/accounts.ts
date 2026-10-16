@@ -1,57 +1,62 @@
 import { Router } from 'express';
-import { userClient } from '../db.js';
-import { ApiError, asyncHandler } from '../middleware/errors.js';
 import { requireUser, type AuthedRequest } from '../middleware/auth.js';
+import { asyncHandler } from '../middleware/errors.js';
+import { db, FieldValue } from '../db.js';
+import { config } from '../config.js';
 
-const router = Router();
+/**
+ * Lesson: accounts. One identity per human (Firebase Auth user), one or more
+ * workspaces. Firestore layout:
+ *   profiles/{uid}                       — display info, verification, default workspace
+ *   workspaces/{wsId}                    — storefront, balances live with the ledger
+ *   workspaces/{wsId}/members/{uid}      — role in this workspace
+ */
 
-// Who am I — the first endpoint every backend needs.
-router.get(
-  '/me',
-  requireUser,
-  asyncHandler(async (req: AuthedRequest, res) => {
-    const client = userClient(req.headers.authorization!.slice(7));
-    const { data, error } = await client
-      .from('profiles')
-      .select('id, phone, email, full_name, verification')
-      .eq('id', req.userId!)
-      .maybeSingle();
-    if (error || !data) {
-      // Signed-up in auth but no profile row yet → create it lazily.
-      const { data: created, error: e2 } = await client
-        .from('profiles')
-        .insert({ id: req.userId!, phone: '', full_name: '' })
-        .select('id, phone, email, full_name, verification')
-        .single();
-      if (e2) throw new ApiError(400, e2.message);
-      res.json(created);
-      return;
-    }
-    res.json(data);
-  })
-);
+export const accountsRouter = Router();
 
-// Create a workspace ("Start selling", FR-ACC-03 entry point).
-router.post(
-  '/workspaces',
-  requireUser,
-  asyncHandler(async (req: AuthedRequest, res) => {
-    const name = String(req.body?.name ?? '').trim();
-    const kind = req.body?.kind ?? 'personal';
-    if (name.length < 2) throw new ApiError(400, 'workspace name is required');
-    if (!['personal', 'business', 'supplier', 'farm', 'institution'].includes(kind)) {
-      throw new ApiError(400, `unknown workspace kind ${kind}`);
-    }
-    const client = userClient(req.headers.authorization!.slice(7));
-    const { data: ws, error } = await client
-      .from('workspaces')
-      .insert({ owner_id: req.userId!, name, kind })
-      .select('id, name, kind')
-      .single();
-    if (error) throw new ApiError(400, error.message);
-    await client.from('workspace_members').insert({ workspace_id: ws.id, member_id: req.userId!, role: 'owner' });
-    res.status(201).json(ws);
-  })
-);
+/** GET /api/v1/accounts/me — your profile (auto-created on first read). */
+accountsRouter.get('/me', requireUser, asyncHandler(async (req, res) => {
+  const uid = (req as AuthedRequest).user.uid;
+  const ref = db.collection('profiles').doc(uid);
+  const snap = await ref.get();
 
-export const accountsRouter = router;
+  if (!snap.exists) {
+    const profile = {
+      phone: (req as AuthedRequest).user.phone ?? '',
+      displayName: '',
+      verification: 'phone',           // progressive: phone → id → business
+      defaultWorkspaceId: null as string | null,
+      createdAt: FieldValue.serverTimestamp(),
+    };
+    await ref.create(profile);         // create() fails if it exists — race-safe
+    res.status(201).json({ profile });
+    return;
+  }
+  res.json({ profile: snap.data() });
+}));
+
+/** POST /api/v1/accounts/workspaces — create a workspace and become its OWNER. */
+accountsRouter.post('/workspaces', requireUser, asyncHandler(async (req, res) => {
+  const uid = (req as AuthedRequest).user.uid;
+  const { name, type } = req.body ?? {};
+
+  // HABIT 1 — validate input before touching the database
+  if (typeof name !== 'string' || name.trim().length < 2) {
+    res.status(400).json({ error: 'invalid_name', message: 'Workspace name must be at least 2 characters.' });
+    return;
+  }
+  const kind = ['personal', 'business', 'institution'].includes(type) ? type : 'personal';
+
+  // HABIT 2 — one transaction, two related writes (workspace + membership)
+  const wsRef = db.collection('workspaces').doc();
+  const memberRef = wsRef.collection('members').doc(uid);
+  const profileRef = db.collection('profiles').doc(uid);
+
+  await db.runTransaction(async (tx) => {
+    tx.create(wsRef, { name: name.trim(), kind, ownerId: uid, verification: 'unverified', createdAt: FieldValue.serverTimestamp() });
+    tx.create(memberRef, { role: 'OWNER', createdAt: FieldValue.serverTimestamp() });
+    tx.update(profileRef, { defaultWorkspaceId: wsRef.id });
+  });
+
+  res.status(201).json({ id: wsRef.id, name: name.trim(), kind, role: 'OWNER' });
+}));

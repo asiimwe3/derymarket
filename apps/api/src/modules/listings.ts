@@ -1,116 +1,95 @@
 import { Router } from 'express';
-import { anonClient, userClient } from '../db.js';
-import { ApiError, asyncHandler } from '../middleware/errors.js';
 import { requireUser, type AuthedRequest } from '../middleware/auth.js';
+import { ApiError, asyncHandler } from '../middleware/errors.js';
+import { db, FieldValue } from '../db.js';
+import { config } from '../config.js';
 
 /**
- * ── LESSON 1 WORKED EXAMPLE: create a listing ──────────────────────────────
- * Read this file top to bottom. It demonstrates every backend habit:
- *   1. validate the input BEFORE touching the database
- *   2. authorize: does this user own the workspace they're posting to?
- *   3. idempotency: retries never create duplicates
- *   4. one SQL transaction for related changes
- *   5. precise status codes: 400 = your fault, 401 = who are you,
- *      403 = not allowed, 404 = doesn't exist, 201 = created
+ * Lesson: listings — the worked example. The five habits every endpoint follows:
+ *  1. Validate input first (before touching the database)
+ *  2. Authorize: who is calling, and do they own the workspace?
+ *  3. Idempotency for writes (Idempotency-Key header)
+ *  4. Related changes in one transaction
+ *  5. Precise status codes: 400 client error, 401 unverified, 403 forbidden,
+ *     404 missing, 201 created
  */
 
-const router = Router();
+export const listingsRouter = Router();
 
-// Browse — public (RLS only shows active listings to anonymous readers).
-router.get(
-  '/',
-  asyncHandler(async (req, res) => {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const size = Math.min(50, Math.max(1, Number(req.query.size) || 20));
-    const auth = (req.headers.authorization ?? '');
-    const client = auth.startsWith('Bearer ') ? userClient(auth.slice(7)) : anonClient();
-    const { data, error } = await client
-      .from('listings')
-      .select('id, title, price_cents, currency, type, category_id, created_at')
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .range((page - 1) * size, page * size - 1);
-    if (error) throw new ApiError(500, 'Could not load listings');
-    res.json({ page, size, items: data ?? [] });
-  })
-);
+/** GET /api/v1/listings — public browse. No auth needed. */
+listingsRouter.get('/', asyncHandler(async (req, res) => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const size = Math.min(config.pageSizeMax, Math.max(1, Number(req.query.size) || config.pageSizeDefault));
 
-interface CreateListingBody {
-  workspaceId?: string;
-  title?: string;
-  priceCents?: number;
-  type?: string;
-  categoryId?: string;
-  stock?: number;
-  description?: string;
-}
+  const snap = await db.collection('listings')
+    .where('status', '==', 'active')
+    .orderBy('createdAt', 'desc')
+    .offset((page - 1) * size)
+    .limit(size)
+    .get();
 
-router.post(
-  '/',
-  requireUser,
-  asyncHandler(async (req: AuthedRequest, res) => {
-    const body = (req.body ?? {}) as CreateListingBody;
+  const items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  res.json({ page, size, items });
+}));
 
-    // 1 ── validation
-    const title = String(body.title ?? '').trim();
-    const price = Number(body.priceCents ?? NaN);
-    const type = body.type ?? 'product';
-    if (!body.workspaceId) throw new ApiError(400, 'workspaceId is required');
-    if (title.length < 3 || title.length > 120) throw new ApiError(400, 'title must be 3-120 characters');
-    if (!Number.isFinite(price) || price < 0 || !Number.isSafeInteger(price)) {
-      throw new ApiError(400, 'priceCents must be a non-negative integer');
+/** POST /api/v1/listings — create in YOUR workspace. */
+listingsRouter.post('/', requireUser, asyncHandler(async (req, res) => {
+  const uid = (req as AuthedRequest).user.uid;
+  const { workspaceId, title, kind, description, price, currency, unit, stock } = req.body ?? {};
+
+  // HABIT 1 — validation
+  if (typeof workspaceId !== 'string' || !workspaceId) throw new ApiError(400, 'invalid_workspace', 'workspaceId is required.');
+  if (typeof title !== 'string' || title.trim().length < 3) throw new ApiError(400, 'invalid_title', 'Title must be at least 3 characters.');
+  if (!['product', 'used_good', 'produce'].includes(kind)) throw new ApiError(400, 'invalid_kind', 'kind must be product | used_good | produce.');
+  if (typeof price !== 'number' || price < 100) throw new ApiError(400, 'invalid_price', 'Price must be at least UGX 100.');
+  if (!Number.isInteger(stock) || stock < 0) throw new ApiError(400, 'invalid_stock', 'stock must be a whole number ≥ 0.');
+
+  const listingRef = db.collection('listings').doc();
+  const idempotencyKey = typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : null;
+  const idemRef = idempotencyKey
+    ? db.collection('idempotency').doc(`${uid}:${idempotencyKey}`)
+    : null;
+
+  let listingId = '';
+
+  await db.runTransaction(async (tx) => {
+    // HABIT 2 — authorization INSIDE the transaction (role re-checked atomically)
+    const memberSnap = await tx.get(db.collection('workspaces').doc(workspaceId).collection('members').doc(uid));
+    const role = memberSnap.data()?.role;
+    if (role !== 'OWNER' && role !== 'MANAGER') {
+      throw new ApiError(403, 'not_a_seller', 'Only an OWNER or MANAGER of this workspace can create listings.');
     }
-    if (!['product', 'used_good'].includes(type)) throw new ApiError(400, `unknown type ${type}`);
 
-    const client = userClient(req.headers.authorization!.slice(7));
-    const userId = req.userId!;
-
-    // 2 ── authorization: caller must be a member of the workspace
-    const { data: membership } = await client
-      .from('workspace_members')
-      .select('role')
-      .eq('workspace_id', body.workspaceId)
-      .eq('member_id', userId)
-      .maybeSingle();
-    if (!membership) throw new ApiError(403, 'You do not have access to that workspace');
-
-    // 3 ── idempotency: same key = same result, never a duplicate
-    const idemKey = (req.headers['idempotency-key'] as string | undefined) ?? null;
-    if (idemKey) {
-      const { data: seen } = await client
-        .from('idempotency_keys')
-        .select('response')
-        .eq('key', idemKey)
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (seen) {
-        res.status(200).json(seen.response); // retry of the same request
+    // HABIT 3 — idempotency: same key returns the same result, no duplicate listing
+    if (idemRef) {
+      const idemSnap = await tx.get(idemRef);
+      if (idemSnap.exists) {
+        listingId = idemSnap.data()!.listingId as string;
         return;
       }
     }
 
-    // 4 ── insert
-    const { data: listing, error } = await client
-      .from('listings')
-      .insert({
-        workspace_id: body.workspaceId,
-        title,
-        price_cents: price,
-        type,
-        stock: Number(body.stock ?? 1),
-        description: String(body.description ?? ''),
-        category_id: body.categoryId ?? null,
-      })
-      .select('id, title, price_cents, currency, type, status')
-      .single();
-    if (error) throw new ApiError(400, error.message);
+    // HABIT 4 — the listing and its idempotency record in ONE transaction
+    tx.create(listingRef, {
+      workspaceId,
+      title: title.trim(),
+      kind, description: typeof description === 'string' ? description : '',
+      priceMinor: Math.round(price),   // money is ALWAYS integer minor units (UGX has no cents)
+      currency: currency === 'USD' ? 'USD' : 'UGX',
+      unit: typeof unit === 'string' && unit ? unit : 'item',
+      stock, status: 'active',
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    if (idemRef) tx.create(idemRef, { listingId: listingRef.id, createdAt: FieldValue.serverTimestamp() });
+  });
 
-    if (idemKey) {
-      await client.from('idempotency_keys').insert({ key: idemKey, user_id: userId, response: listing });
-    }
+  res.status(201).json({ id: listingId, message: 'Listing created.' });
+}));
 
-    res.status(201).json(listing);
-  })
-);
-
-export const listingsRouter = router;
+// ── LESSON 1 (your assignment) ─────────────────────────────────────────────
+// GET /api/v1/listings/:id → return one listing by id; 404 with
+//   { error: 'not_found' } when it doesn't exist.
+// PATCH /api/v1/listings/:id → only a workspace member may edit title/price/
+//   stock; everyone else gets 403.
+// Follow the patterns above. I review your code line by line.
