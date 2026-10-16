@@ -31,7 +31,7 @@ export default function CartPage() {
         <div key={it.listingId} className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-3">
           <div>
             <p className="font-semibold">{it.title}</p>
-            <p className="text-sm text-neutral-500">UGX {it.price.toLocaleString()} each</p>
+            <p className="text-sm text-neutral-500">UGX {it.priceMinor.toLocaleString()} each</p>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setQty(idx, it.qty - 1)} className="h-8 w-8 rounded-full bg-neutral-100" aria-label="Decrease">−</button>

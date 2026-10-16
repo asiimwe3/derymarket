@@ -7,7 +7,7 @@ export type Listing = {
   title: string;
   kind: string;
   description?: string;
-  price: number;
+  priceMinor: number;
   currency: string;
   unit?: string;
   stock?: number;

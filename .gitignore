@@ -9,3 +9,4 @@ dist/
 coverage/
 .DS_Store
 firestore-debug.log
+apps/api/lib/

@@ -26,7 +26,7 @@ export default function ListingPage({ params }: { params: Promise<{ id: string }
     const cart = getCart();
     const existing = cart.find((i) => i.listingId === listing.id);
     if (existing) existing.qty += 1;
-    else cart.push({ listingId: listing.id, title: listing.title, price: listing.price, qty: 1 });
+    else cart.push({ listingId: listing.id, title: listing.title, priceMinor: listing.priceMinor, qty: 1 });
     saveCart(cart);
     setNote('Added to cart ✓');
   };
@@ -37,7 +37,7 @@ export default function ListingPage({ params }: { params: Promise<{ id: string }
     <div className="mx-auto max-w-2xl space-y-4">
       <div className="flex h-56 items-center justify-center rounded-xl bg-market-50 text-6xl" aria-hidden>🛍️</div>
       <h1 className="text-2xl font-bold">{listing.title}</h1>
-      <p className="text-2xl font-black text-market-600">UGX {listing.price?.toLocaleString()}</p>
+      <p className="text-2xl font-black text-market-600">UGX {listing.priceMinor?.toLocaleString()}</p>
       <p className="text-sm capitalize text-neutral-500">{String(listing.kind).replace('_', ' ')} · {listing.stock ?? 0} in stock</p>
       {listing.description && <p className="text-sm text-neutral-700">{listing.description}</p>}
       <EscrowBanner text="Pay via MTN MoMo, Airtel Money, card or cash on delivery. Money is held in escrow until you confirm delivery." />

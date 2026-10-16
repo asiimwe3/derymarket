@@ -1,5 +1,5 @@
 // Cart lives in localStorage for now (Phase 1 slice, no account required to browse).
-export type CartItem = { listingId: string; title: string; price: number; qty: number };
+export type CartItem = { listingId: string; title: string; priceMinor: number; qty: number };
 const KEY = 'derymarket.cart.v1';
 
 export function getCart(): CartItem[] {
@@ -10,5 +10,9 @@ export function saveCart(items: CartItem[]) {
   localStorage.setItem(KEY, JSON.stringify(items));
 }
 export function cartTotal(items: CartItem[]) {
-  return items.reduce((sum, i) => sum + i.price * i.qty, 0);
+  return items.reduce((sum, i) => sum + i.priceMinor * i.qty, 0);
+}
+
+export function clearCart() {
+  if (typeof window !== 'undefined') localStorage.removeItem(KEY);
 }

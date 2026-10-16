@@ -1,6 +1,7 @@
 import express from 'express';
 import { accountsRouter } from './modules/accounts.js';
 import { listingsRouter } from './modules/listings.js';
+import { ordersRouter } from './modules/orders.js';
 import { config } from './config.js';
 
 /** The Express app — mounted on one Cloud Function. */
@@ -12,6 +13,7 @@ app.get(`${config.apiPrefix}/health`, (_req, res) => res.json({ ok: true, servic
 
 app.use(`${config.apiPrefix}/accounts`, accountsRouter);
 app.use(`${config.apiPrefix}/listings`, listingsRouter);
+app.use(`${config.apiPrefix}/orders`, ordersRouter);
 
 app.use((_req: express.Request, res: express.Response) => res.status(404).json({ error: 'route_not_found' }));
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

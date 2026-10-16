@@ -9,7 +9,7 @@ export function ListingCard({ l }: { l: Listing }) {
       <div className="mb-2 flex h-24 items-center justify-center rounded-lg bg-market-50 text-2xl" aria-hidden>🛍️</div>
       <h3 className="truncate text-sm font-semibold">{l.title}</h3>
       <p className="text-xs text-neutral-500 capitalize">{l.kind?.replace('_', ' ')}</p>
-      <p className="mt-1 font-bold text-market-600">UGX {l.price.toLocaleString()}</p>
+      <p className="mt-1 font-bold text-market-600">UGX {l.priceMinor?.toLocaleString() ?? '—'}</p>
       <span className="mt-1 inline-block rounded-full bg-market-50 px-2 py-0.5 text-[10px] font-semibold text-market-700">
         Escrow protected
       </span>

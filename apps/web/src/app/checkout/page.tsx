@@ -1,16 +1,52 @@
 'use client';
-// S6 — Checkout shell: address, payment method list, cost breakdown, escrow box.
-// Payment capture (PesaPal) is wired in a later phase; this is the honest UI skeleton.
+// S6 — Checkout: creates real orders per cart line via POST /orders.
+// Money capture (PesaPal) lands in a later phase; orders start in 'created'
+// with stock reserved, exactly as the Trade Engine specifies.
 import { useState } from 'react';
-import { getCart, cartTotal } from '@/lib/cart';
+import { useRouter } from 'next/navigation';
+import { getCart, cartTotal, clearCart, type CartItem } from '@/lib/cart';
+import { apiFetch } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { EscrowBanner } from '@/components/ui';
 
-const PAYMENTS = ['MTN MoMo', 'Airtel Money', 'Card', 'Cash on delivery'];
+const PAYMENTS: Array<[string, string]> = [
+  ['MTN MoMo', 'mtn_momo'],
+  ['Airtel Money', 'airtel_money'],
+  ['Card', 'card'],
+  ['Cash on delivery', 'cod'],
+];
 
 export default function CheckoutPage() {
   const total = cartTotal(getCart());
-  const [payment, setPayment] = useState(PAYMENTS[0]);
+  const [payment, setPayment] = useState(PAYMENTS[0][1]);
   const [address, setAddress] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const { user } = useAuth();
+  const auth = { currentUser: user };
+  const router = useRouter();
+
+  const placeOrders = async () => {
+    if (!auth.currentUser) { setError('Sign in first (Account → login).'); return; }
+    if (!address.trim()) { setError('Enter a delivery address.'); return; }
+    const cart = getCart();
+    if (!cart.length) { setError('Your cart is empty.'); return; }
+    setBusy(true); setError('');
+    try {
+      for (const it of cart) {
+        await apiFetch(auth, '/orders', {
+          method: 'POST',
+          body: JSON.stringify({ listingId: it.listingId, quantity: it.qty, paymentMethod: payment, deliveryAddress: address.trim() }),
+        });
+      }
+      clearCart();
+      router.push('/orders?placed=1');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Order failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-xl space-y-4">
@@ -25,10 +61,10 @@ export default function CheckoutPage() {
       <section className="rounded-xl border border-neutral-200 bg-white p-4">
         <h2 className="mb-2 text-sm font-bold">Payment method</h2>
         <div className="space-y-2">
-          {PAYMENTS.map((p) => (
-            <label key={p} className={`flex items-center gap-2 rounded-lg border p-2 text-sm ${payment === p ? 'border-market-500 bg-market-50' : 'border-neutral-200'}`}>
-              <input type="radio" name="pay" checked={payment === p} onChange={() => setPayment(p)} />
-              {p}
+          {PAYMENTS.map(([label, value]) => (
+            <label key={value} className={`flex items-center gap-2 rounded-lg border p-2 text-sm ${payment === value ? 'border-market-500 bg-market-50' : 'border-neutral-200'}`}>
+              <input type="radio" name="pay" checked={payment === value} onChange={() => setPayment(value)} />
+              {label}
             </label>
           ))}
         </div>
@@ -40,10 +76,14 @@ export default function CheckoutPage() {
         <div className="mt-2 flex justify-between font-bold"><span>Total</span><span>UGX {total.toLocaleString()}</span></div>
       </section>
 
+      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+
       <EscrowBanner text="Your payment is held in escrow by DeryMarket. The seller is paid only after you confirm the order arrived." />
-      <button disabled className="w-full rounded-full bg-neutral-300 py-3 font-bold text-neutral-500" title="PesaPal + order lifecycle arrive with the Trade Engine lesson">
-        Pay UGX {total.toLocaleString()} (payments land with the Trade Engine lesson)
+      <button onClick={placeOrders} disabled={busy}
+        className="w-full rounded-full bg-market-600 py-3 font-bold text-white disabled:opacity-60">
+        {busy ? 'Placing order…' : `Place order — UGX ${total.toLocaleString()}`}
       </button>
+      <p className="text-center text-xs text-neutral-400">Money collection (PesaPal) arrives with the payments phase; this creates the order and reserves stock now.</p>
     </div>
   );
 }

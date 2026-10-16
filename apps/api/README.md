@@ -51,9 +51,12 @@ Functions require billing, ~cost is tiny at course scale):
 
 - Lesson 0 (done) — skeleton: identity, workspaces, listings, orders state
   machine, double-entry ledger design, outbox, idempotency, security rules
-- Lesson 1 (yours) — GET /api/v1/listings/:id with 404 handling;
-  PATCH /listings/:id (owner-only edit)
-- Lesson 2 — place an order: state machine walk created→reserved→paid,
-  stock decrement + outbox event, all inside one transaction
+- Lesson 1 (done) — GET /listings/:id with 404 handling;
+  PATCH /listings/:id (member-only edit). Implemented and verified end-to-end
+  with the emulator suite (see git history for the full walkthrough).
+- Lesson 2 (yours, next) — order state transitions:
+  POST /orders/:id/transition {to: "reserved"|"paid"|"cancelled"}
+  following the ALLOWED map in src/modules/orders.ts; seller-only for
+  reserved/cancelled, buyer-only for paid; stock restored on cancel.
 - Lesson 3 — PesaPal payment init + IPN webhook + escrow ledger postings
 - Lesson 4 — release/refund flows and the dispute path

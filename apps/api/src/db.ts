@@ -3,5 +3,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 /** The Admin SDK — server-side only, bypasses security rules. Never ship to a client. */
 initializeApp();
+import * as admin from 'firebase-admin';
 export const db = getFirestore();
 export { FieldValue };
+export { admin };

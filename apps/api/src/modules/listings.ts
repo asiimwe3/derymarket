@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireUser, type AuthedRequest } from '../middleware/auth.js';
 import { ApiError, asyncHandler } from '../middleware/errors.js';
-import { db, FieldValue } from '../db.js';
+import { db, FieldValue, admin } from '../db.js';
 import { config } from '../config.js';
 
 /**
@@ -90,6 +90,7 @@ listingsRouter.post('/', requireUser, asyncHandler(async (req, res) => {
     if (idemRef) tx.create(idemRef, { listingId: listingRef.id, createdAt: FieldValue.serverTimestamp() });
   });
 
+  if (!listingId) listingId = listingRef.id; // fresh-create path (idem path already set it)
   res.status(201).json({ id: listingId, message: 'Listing created.' });
 }));
 
@@ -99,3 +100,62 @@ listingsRouter.post('/', requireUser, asyncHandler(async (req, res) => {
 // PATCH /api/v1/listings/:id → only a workspace member may edit title/price/
 //   stock; everyone else gets 403.
 // Follow the patterns above. I review your code line by line.
+
+/** GET /api/v1/listings/:id — one listing (public if active, or a workspace member). */
+listingsRouter.get('/:id', asyncHandler(async (req, res) => {
+  const snap = await db.collection('listings').doc(String(req.params.id)).get();
+  if (!snap.exists) throw new ApiError(404, 'listing_not_found', 'No listing with that id.');
+  const data = snap.data()!;
+  if (data.status !== 'active') {
+    // inactive listings are visible only to the workspace's own people
+    const auth = req.headers.authorization ?? '';
+    if (!auth.startsWith('Bearer ')) throw new ApiError(404, 'listing_not_found', 'No listing with that id.');
+    const member = await db.collection('workspaces').doc(data.workspaceId).collection('members').doc(
+      (await admin.auth().verifyIdToken(auth.slice(7))).uid).get();
+    if (!member.exists) throw new ApiError(404, 'listing_not_found', 'No listing with that id.');
+  }
+  res.json({ id: snap.id, ...data });
+}));
+
+/** PATCH /api/v1/listings/:id — edit price/stock/title/status (workspace OWNER/MANAGER only). */
+listingsRouter.patch('/:id', requireUser, asyncHandler(async (req, res) => {
+  const uid = (req as AuthedRequest).user.uid;
+  const { title, description, price, stock, status } = req.body ?? {};
+
+  // HABIT 1 — validation: only known, well-typed fields pass
+  const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
+  if (title !== undefined) {
+    if (typeof title !== 'string' || title.trim().length < 3) throw new ApiError(400, 'invalid_title', 'Title must be at least 3 characters.');
+    patch.title = title.trim();
+  }
+  if (description !== undefined) {
+    if (typeof description !== 'string') throw new ApiError(400, 'invalid_description', 'description must be text.');
+    patch.description = description;
+  }
+  if (price !== undefined) {
+    if (typeof price !== 'number' || price < 100) throw new ApiError(400, 'invalid_price', 'Price must be at least UGX 100.');
+    patch.priceMinor = Math.round(price);
+  }
+  if (stock !== undefined) {
+    if (!Number.isInteger(stock) || stock < 0) throw new ApiError(400, 'invalid_stock', 'stock must be a whole number ≥ 0.');
+    patch.stock = stock;
+  }
+  if (status !== undefined) {
+    if (!['active', 'paused', 'archived'].includes(status)) throw new ApiError(400, 'invalid_status', 'status must be active | paused | archived.');
+    patch.status = status;
+  }
+
+  await db.runTransaction(async (tx) => {
+    // HABIT 2 — authorization and existence INSIDE the transaction
+    const snap = await tx.get(db.collection('listings').doc(String(req.params.id)));
+    if (!snap.exists) throw new ApiError(404, 'listing_not_found', 'No listing with that id.');
+    const member = await tx.get(db.collection('workspaces').doc(snap.data()!.workspaceId).collection('members').doc(uid));
+    const role = member.data()?.role;
+    if (role !== 'OWNER' && role !== 'MANAGER') {
+      throw new ApiError(403, 'not_a_seller', 'Only an OWNER or MANAGER of this workspace can edit listings.');
+    }
+    tx.update(snap.ref, patch);
+  });
+
+  res.json({ id: String(req.params.id), message: 'Listing updated.' });
+}));
